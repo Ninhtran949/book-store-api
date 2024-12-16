@@ -18,7 +18,7 @@ const io = socketIo(server, {
   }
 });
 
-// Kết nối MongoDB Atlas
+// Kết nối MongoDB 
 mongoose.connect(process.env.DATABASE_URL);
 
 const db = mongoose.connection;

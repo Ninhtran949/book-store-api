@@ -103,27 +103,28 @@ router.post('/logout', (req, res) => {
 
   res.json({ message: 'Logged out successfully' });
 });
-
-// CREATE a new User
+// tạo user
 router.post('/signup', async (req, res) => {
-  const hashedPassword = await bcrypt.hash(req.body.password, 10);
-  
-  const user = new User({
-    address: req.body.address,
-    id: req.body.id,
-    name: req.body.name,
-    password: hashedPassword,
-    phoneNumber: req.body.phoneNumber,
-    strUriAvatar: req.body.strUriAvatar || ''
-  });
-
   try {
+    console.log('Request Body:', req.body); // Log dữ liệu nhận từ client
+    const hashedPassword = await bcrypt.hash(req.body.password, 10);
+    const user = new User({
+      address: req.body.address,
+      id: req.body.id,
+      name: req.body.name,
+      password: hashedPassword,
+      phoneNumber: req.body.phoneNumber,
+      strUriAvatar: req.body.strUriAvatar || ''
+    });
+
     const newUser = await user.save();
     res.status(201).json(newUser);
   } catch (err) {
+    console.error('Error creating user:', err.message);
     res.status(400).json({ message: err.message });
   }
 });
+
 
 // UPDATE a User by ID
 router.patch('/id/:id', async (req, res) => {

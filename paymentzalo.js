@@ -18,8 +18,8 @@ const config = {
 router.post('/payment', async (req, res) => {
     const { app_user, amount, description } = req.body;
     const embed_data = {
-        //sau khi hoàn tất thanh toán sẽ đi vào link này 
-        redirecturl: 'https://595a-2405-4802-1bd8-f90-5473-df7e-c90b-dbf3.ngrok-free.app/zalopay/return',
+        //sau khi hoàn tất thanh toán sẽ đi vào link này ngrok http 8080
+        redirecturl: 'https://d945-14-190-92-233.ngrok-free.app/zalopay/return',
     };
   
     const items = [];
@@ -33,10 +33,10 @@ router.post('/payment', async (req, res) => {
       item: JSON.stringify(items),
       embed_data: JSON.stringify(embed_data),
       amount,
-      callback_url: 'https://595a-2405-4802-1bd8-f90-5473-df7e-c90b-dbf3.ngrok-free.app/zalopay/callback', //  URL server 
+      callback_url: 'https://d945-14-190-92-233.ngrok-free.app/zalopay/callback', //  URL server 
       description,
       bank_code: '',
-      return_url: 'https://595a-2405-4802-1bd8-f90-5473-df7e-c90b-dbf3.ngrok-free.app/zalopay/return', 
+      return_url: 'https://d945-14-190-92-233.ngrok-free.app/zalopay/return', 
     };
   
     const data = `${config.app_id}|${order.app_trans_id}|${order.app_user}|${order.amount}|${order.app_time}|${order.embed_data}|${order.item}`;

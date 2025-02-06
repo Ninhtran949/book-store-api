@@ -1,8 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
+const RefreshToken = require('../models/refreshToken');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const cookieParser = require('cookie-parser');
+
+router.use(cookieParser());
 
 // GET all Users
 router.get('/', async (req, res) => {
@@ -14,11 +18,11 @@ router.get('/', async (req, res) => {
   }
 });
 
-// GET  User by ID
+// GET User by ID
 router.get('/id/:id', async (req, res) => {
   try {
-    const id = req.params.id;
-    const user = await User.findOne({ id: id });
+    const user = await User.findById(req.params.id);
+    if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -40,69 +44,97 @@ router.get('/phone/:phoneNumber', async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 });
-// route /login để tạo cả accessToken và refreshToken. Lưu trữ refresh token trong cơ sở dữ liệu hoặc bộ nhớ tạm.
-const refreshTokens = []; // Lưu trữ refresh token trong bộ nhớ (chỉ dùng thử nghiệm)
 
+// Đăng nhập
 router.post('/login', async (req, res) => {
-  const { username, password } = req.body;
+    const { username, password } = req.body;
 
-  try {
-    // Tìm kiếm người dùng trong cơ sở dữ liệu theo `id` hoặc `phoneNumber`
-    const user = await User.findOne({ 
-      $or: [{ id: username }, { phoneNumber: username }] 
-    });
+    try {
+        const user = await User.findOne({ phoneNumber: username });
+        if (!user) return res.status(400).json({ message: 'User not found' });
 
-    if (!user) {
-      return res.status(401).json({ message: 'User not found' });
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) return res.status(400).json({ message: 'Invalid credentials' });
+
+        const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1h' });
+        const refreshToken = jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, { expiresIn: '7d' });
+
+        // Lưu refresh token vào cơ sở dữ liệu
+        const newRefreshToken = new RefreshToken({
+            token: refreshToken,
+            userId: user._id,
+            expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // 7 ngày
+        });
+        await newRefreshToken.save();
+
+        res.json({
+            accessToken,
+            refreshToken,
+            user: {
+                id: user._id,
+                name: user.name,
+                phoneNumber: user.phoneNumber
+            }
+        });
+
+    } catch (error) {
+        res.status(500).json({ message: error.message });
     }
+});
 
-    // So sánh mật khẩu đã hash
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res.status(401).json({ message: 'Invalid password' });
+// Đăng xuất
+router.post('/logout', async (req, res) => {
+    try {
+        const refreshToken = req.body.refreshToken;
+        console.log('Logout attempt with refresh token:', refreshToken);
+
+        if (!refreshToken) {
+            console.log('No refresh token found. You are already logged out.');
+            return res.status(200).json({ message: 'No refresh token found. You are already logged out.' });
+        }
+
+        // Tìm và cập nhật refresh token để thu hồi
+        const token = await RefreshToken.findOneAndUpdate(
+            { token: refreshToken },
+            { isRevoked: true },
+            { new: true }
+        );
+
+        if (!token) {
+            console.log('Refresh token not found. You are already logged out.');
+            return res.status(200).json({ message: 'Refresh token not found. You are already logged out.' });
+        }
+
+        console.log('Refresh token revoked:', token);
+
+        // Xóa cookie
+        res.clearCookie('refreshToken');
+        res.json({ message: 'Logged out successfully' });
+    } catch (error) {
+        console.error('Error during logout:', error);
+        res.status(500).json({ message: error.message });
     }
-
-    // Tạo access token và refresh token
-    const accessToken = jwt.sign({ id: user.id, name: user.name }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
-    const refreshToken = jwt.sign({ id: user.id, name: user.name }, process.env.REFRESH_TOKEN_SECRET);
-
-    refreshTokens.push(refreshToken); // Lưu refresh token vào bộ nhớ (cần thay thế bằng cơ sở dữ liệu)
-
-    res.json({ accessToken, refreshToken });
-  } catch (error) {
-    res.status(500).json({ message: 'Server error', error });
-  }
-});
-// endpoint /token để lấy refresh token, xác minh và cấp mới access token.
-router.post('/token', (req, res) => {
-  const { refreshToken } = req.body;
-
-  if (!refreshToken) {
-    return res.status(401).json({ message: 'Refresh token is required' });
-  }
-
-  if (!refreshTokens.includes(refreshToken)) {
-    return res.status(403).json({ message: 'Invalid refresh token' });
-  }
-
-  jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ message: 'Invalid refresh token' });
-
-    const accessToken = jwt.sign({ id: user.id, name: user.name }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
-    res.json({ accessToken });
-  });
 });
 
-router.post('/logout', (req, res) => {
-  const { refreshToken } = req.body;
+// Tạo access token mới từ refresh token
+router.post('/token', async (req, res) => {
+    const { refreshToken } = req.body;
+    if (!refreshToken) return res.status(401).json({ message: 'Refresh token is required' });
 
-  const index = refreshTokens.indexOf(refreshToken);
-  if (index > -1) {
-    refreshTokens.splice(index, 1);
-  }
+    try {
+        const token = await RefreshToken.findOne({ token: refreshToken, isRevoked: false });
+        if (!token) return res.status(403).json({ message: 'Invalid refresh token' });
 
-  res.json({ message: 'Logged out successfully' });
+        const user = await User.findById(token.userId);
+        if (!user) return res.status(403).json({ message: 'Invalid refresh token' });
+
+        const accessToken = jwt.sign({ id: user._id }, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
+        res.json({ accessToken });
+    } catch (error) {
+        res.status(500).json({ message: error.message });
+    }
 });
+
 // tạo user
 router.post('/signup', async (req, res) => {
   try {
@@ -125,6 +157,28 @@ router.post('/signup', async (req, res) => {
   }
 });
 
+// Thay đổi mật khẩu người dùng
+router.patch('/change-password/:id', async (req, res) => {
+    const { oldPassword, newPassword } = req.body;
+    const userId = req.params.id;
+
+    try {
+        const user = await User.findOne({id:userId});
+        if (!user) return res.status(404).json({ message: 'User not found' });
+
+        const isMatch = await bcrypt.compare(oldPassword, user.password);
+        if (!isMatch) return res.status(400).json({ message: 'Old password is incorrect' });
+
+        const hashedNewPassword = await bcrypt.hash(newPassword, 10);
+        user.password = hashedNewPassword;
+        await user.save();
+
+        res.json({ message: 'Password changed successfully' });
+    } catch (error) {
+        console.error('Error changing password:', error);
+        res.status(500).json({ message: error.message });
+    }
+});
 
 // UPDATE a User by ID
 router.patch('/id/:id', async (req, res) => {
@@ -161,3 +215,35 @@ router.delete('/id/:id', async (req, res) => {
 });
 
 module.exports = router;
+
+// Hàm tạo access token
+const generateAccessToken = (user) => {
+  // Create a plain object with only the needed user data
+  const payload = {
+      id: user._id,
+      username: user.username,
+      phoneNumber: user.phoneNumber
+  };
+  return jwt.sign(payload, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '15m' });
+};
+
+// Hàm tạo refresh token
+const generateRefreshToken = async (user) => {
+  // Create a plain object with only the needed user data
+  const payload = {
+      id: user._id,
+      username: user.username,
+      phoneNumber: user.phoneNumber
+  };
+  const token = jwt.sign(payload, process.env.REFRESH_TOKEN_SECRET);
+  
+  const refreshToken = new RefreshToken({
+      token: token,
+      userId: user._id,
+      expiryDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      isRevoked: false
+  });
+  
+  await refreshToken.save();
+  return token;
+};

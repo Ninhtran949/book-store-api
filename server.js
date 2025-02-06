@@ -18,7 +18,7 @@ const io = socketIo(server, {
   }
 });
 
-// Kết nối MongoDB 
+// Kết nối MongoDB Atlas
 mongoose.connect(process.env.DATABASE_URL);
 
 const db = mongoose.connection;
@@ -26,8 +26,20 @@ db.on('error', (error) => console.error(error));
 db.once('open', () => console.log('Connected to Database'));
 
 // Middleware
-app.use(cors());
+const corsOptions = {
+    origin: 'http://127.0.0.1:5500',
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());
+
+const checkTokenExpiration = require('./middlewares/tokenExpiration');
+
+
+app.use(checkTokenExpiration);
 
 // Routes
 const productsRouter = require('./routes/products');

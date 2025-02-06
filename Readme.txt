@@ -1,3 +1,4 @@
+Backend cho app, không call được data thì thử vs postman
 Các lệnh thao tác với API bằng Postman  ví dụ cho user, các models khác tương tự: 
 Các API CRUD cho User:
 GET tất cả các User: GET http://localhost:8080/user

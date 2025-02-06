@@ -4,14 +4,14 @@ const cors = require('cors');
 require('dotenv').config();
 
 const http = require('http');
-const socketIo = require('socket.io');
+const { Server } = require('socket.io');
 
 // Khởi tạo Express và HTTP server
 const app = express();
 const server = http.createServer(app);
 
 // Khởi tạo Socket.IO
-const io = socketIo(server, {
+const io = new Server(server, {
   cors: {
     origin: "*", // Cho phép tất cả các nguồn gốc (origin) truy cập
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH"] // Thêm các phương thức khác nếu cần
@@ -81,9 +81,11 @@ io.on('connection', (socket) => {
 });
 
 // Khởi chạy server
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-  console.log(`Server is running on http://localhost:${PORT}`);
+const PORT = process.env.PORT || 10000;
+const HOST = '0.0.0.0';
+
+server.listen(PORT, HOST, () => {
+  console.log(`Server is running on http://${HOST}:${PORT}`);
 });
 
 // Xuất io để sử dụng trong các router nếu cần

@@ -27,7 +27,7 @@ db.once('open', () => console.log('Connected to Database'));
 
 // Middleware
 const corsOptions = {
-    origin: '*', // Cho phép tất cả các nguồn gốc (origin) truy cập
+    origin: ['http://localhost:3000', 'http://127.0.0.1:5500'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
